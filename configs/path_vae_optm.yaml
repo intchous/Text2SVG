@@ -1,0 +1,62 @@
+n_args: 2
+
+# Transformer config: model dimensionality
+d_model: 80
+
+# Latent vector dimensionality
+dim_z: 24
+
+batch_size: 1
+
+max_pts_len_thresh: 30
+max_total_len: 40
+max_enc_len: 40
+max_dec_len: 40
+
+ModifiedConstEmbedding: False
+
+kl_coe: 0.4
+
+max_num_groups: 1
+
+avg_path_zdim: True
+
+# for VAE
+use_vae: False
+use_resnet: False
+
+# for model fusion
+use_model_fusion: True
+img_size: 64
+d_img_model: 1024
+loss_w_l1: 0.01
+img_latent_dim: 16
+
+# for VQVAE
+use_vqvae: False
+codebook_size: 512
+use_cosine_sim: False
+vq_comb_num: 32
+vq_edim: 2
+vqvae_loss_weight: 0.02
+
+n_layers: 4 # Number of Encoder blocks
+n_layers_decode: 4 # Number of Decoder blocks
+
+n_heads: 8 # Transformer config: number of heads
+dim_feedforward: 512 # Transformer config: FF dimensionality
+
+bin_targets: False
+rel_targets: False
+abs_targets: True
+
+args_decoder: False
+
+dropout: 0.0
+connect_through: True
+
+use_sigmoid: True
+
+diffvg_loss_weight: 0.01
+
+loader_num_workers: 16

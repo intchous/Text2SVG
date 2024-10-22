@@ -1,0 +1,23 @@
+gpu_ids: [0]
+
+rag_sigma: 255.0
+rag_mode: distance
+
+rag_connectivity: 1
+
+is_merge_seg: True
+seg_sigma: 0.6
+
+seg_max_dist: 60
+
+seg_ratio: 0.2
+
+seg_kernel_size: 4
+
+mer_thresh: 30.0
+
+area_th: 3
+
+ratio_th: 100.0
+
+morph_kernel_size: 3
