@@ -76,11 +76,9 @@ class ModifiedConstEmbedding(nn.Module):
         z_transformed = self.z_to_dmodel(z).repeat(
             self.seq_len, 1, 1)
 
-        # 位置编码
         position_encoded = self.PE(z.new_zeros(
             self.seq_len, N, self.cfg.d_model))
 
-        # 结合z_transformed和位置编码
         src = z_transformed + position_encoded
 
         return src
@@ -123,15 +121,11 @@ class Encoder(nn.Module):
 
         # ------------------------------------------------------
         if (self.cfg.avg_path_zdim):
-
-            # 1. 对 memory 和 padding_mask 进行元素乘法
             masked_memory = memory * padding_mask
-
-            # 2. 转换维度
             transposed_memory = masked_memory.permute(
-                1, 0, 2)  # 形状: [batch_size, seq_len, d_model]
+                1, 0, 2)  # [batch_size, seq_len, d_model]
 
-            # 3. 调整形状 [batch_size, d_model * seq_len]
+            # [batch_size, d_model * seq_len]
             flattened_memory = transposed_memory.reshape(
                 transposed_memory.size(0), -1)
 
@@ -253,8 +247,6 @@ class Decoder(nn.Module):
                 src, z, tgt_mask=self.square_subsequent_mask[:S, :S], tgt_key_padding_mask=key_padding_mask, memory2=l)
 
         else:  # "one_shot"
-
-            # TODO: ConstEmbedding, src 是与z无关的纯位置编码? 是否改成ModifiedConstEmbedding
             src = self.embedding(z)
 
             out = self.decoder(src, z, tgt_mask=None,
@@ -262,7 +254,6 @@ class Decoder(nn.Module):
 
         args_logits = self.fcn(out)
 
-        # TODO: 是否需要加sigmoid?
         if self.use_sigmoid:
             args_logits = torch.sigmoid(args_logits)
 
@@ -339,11 +330,9 @@ class SVGTransformer(nn.Module):
 
                 z = rearrange(z, 'p c b z -> b (p c) z')
 
-                # 将 z reshape
                 z_reshaped = z.view(
                     z.shape[0], z.shape[1], -1, self.cfg.vq_edim)
                 # tokenization
-                # quantized, indices, commit_loss = self.vqvae.forward(z)
                 quantized, (vq_loss, commit_loss), indices = self.vqvae.forward(
                     z_reshaped)
                 quantized = quantized.view(z.shape[0], z.shape[1], -1)

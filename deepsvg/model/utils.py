@@ -10,7 +10,8 @@ def _get_key_padding_mask(commands, seq_dim=0):
         commands: Shape [S, ...]
     """
     with torch.no_grad():
-        key_padding_mask = (commands == SVGTensor.COMMANDS_SIMPLIFIED.index("EOS")).cumsum(dim=seq_dim) > 0
+        key_padding_mask = (commands == SVGTensor.COMMANDS_SIMPLIFIED.index(
+            "EOS")).cumsum(dim=seq_dim) > 0
 
         if seq_dim == 0:
             return key_padding_mask.transpose(0, 1)
@@ -19,32 +20,32 @@ def _get_key_padding_mask(commands, seq_dim=0):
 
 def _get_padding_mask(commands, seq_dim=0, extended=False):
     with torch.no_grad():
-        padding_mask = (commands == SVGTensor.COMMANDS_SIMPLIFIED.index("EOS")).cumsum(dim=seq_dim) == 0
+        padding_mask = (commands == SVGTensor.COMMANDS_SIMPLIFIED.index(
+            "EOS")).cumsum(dim=seq_dim) == 0
         padding_mask = padding_mask.float()
 
         if extended:
             # padding_mask doesn't include the final EOS, extend by 1 position to include it in the loss
             S = commands.size(seq_dim)
-            torch.narrow(padding_mask, seq_dim, 3, S-3).add_(torch.narrow(padding_mask, seq_dim, 0, S-3)).clamp_(max=1)
+            torch.narrow(padding_mask, seq_dim, 3, S -
+                         3).add_(torch.narrow(padding_mask, seq_dim, 0, S-3)).clamp_(max=1)
 
         if seq_dim == 0:
             return padding_mask.unsqueeze(-1)
         return padding_mask
 
 
-# padding_mask: EOS 以及其后为0, 前面为1
 def _get_args_padding_mask(args, seq_dim=0, extended=False):
     with torch.no_grad():
         eos_mask = torch.all(args == 0, dim=-1)
         padding_mask = eos_mask.cumsum(dim=seq_dim) == 0
-        # print("padding_mask: ", padding_mask)
         padding_mask = padding_mask.float()
 
         if seq_dim == 0:
             return padding_mask.unsqueeze(-1)
         return padding_mask
 
-# 其中的 True 表示对应位置需要被忽略 (EOS 以及其后为1, 前面为0)
+
 def _get_args_key_padding_mask(args, seq_dim=0):
     """
     Args:
@@ -66,7 +67,8 @@ def _get_group_mask(commands, seq_dim=0):
         commands: Shape [S, ...]
     """
     with torch.no_grad():
-        group_mask = (commands == SVGTensor.COMMANDS_SIMPLIFIED.index("m")).cumsum(dim=seq_dim)
+        group_mask = (commands == SVGTensor.COMMANDS_SIMPLIFIED.index(
+            "m")).cumsum(dim=seq_dim)
         return group_mask
 
 
@@ -77,7 +79,8 @@ def _get_visibility_mask(commands, seq_dim=0):
     """
     S = commands.size(seq_dim)
     with torch.no_grad():
-        visibility_mask = (commands == SVGTensor.COMMANDS_SIMPLIFIED.index("EOS")).sum(dim=seq_dim) < S - 1
+        visibility_mask = (commands == SVGTensor.COMMANDS_SIMPLIFIED.index(
+            "EOS")).sum(dim=seq_dim) < S - 1
 
         if seq_dim == 0:
             return visibility_mask.unsqueeze(-1)
@@ -87,7 +90,8 @@ def _get_visibility_mask(commands, seq_dim=0):
 def _get_key_visibility_mask(commands, seq_dim=0):
     S = commands.size(seq_dim)
     with torch.no_grad():
-        key_visibility_mask = (commands == SVGTensor.COMMANDS_SIMPLIFIED.index("EOS")).sum(dim=seq_dim) >= S - 1
+        key_visibility_mask = (commands == SVGTensor.COMMANDS_SIMPLIFIED.index(
+            "EOS")).sum(dim=seq_dim) >= S - 1
 
         if seq_dim == 0:
             return key_visibility_mask.transpose(0, 1)
@@ -96,7 +100,8 @@ def _get_key_visibility_mask(commands, seq_dim=0):
 
 def _generate_square_subsequent_mask(sz):
     mask = (torch.triu(torch.ones(sz, sz)) == 1).transpose(0, 1)
-    mask = mask.float().masked_fill(mask == 0, float('-inf')).masked_fill(mask == 1, float(0.0))
+    mask = mask.float().masked_fill(mask == 0, float(
+        '-inf')).masked_fill(mask == 1, float(0.0))
     return mask
 
 

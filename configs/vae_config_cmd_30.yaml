@@ -1,5 +1,3 @@
-# kl-1.0_hd-256_ld-90_avg-True_vae-True_sigm-True_mce-False
-
 n_args: 2
 
 # Transformer config: model dimensionality

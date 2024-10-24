@@ -517,7 +517,6 @@ def load_samp_prompts(dataset_name="vectorfusion", do_extend=True):
         samp_prompts = ini_samp_prompts
 
     elif (dataset_name == "animatesvg"):
-        # TODO: test!
         # ini_samp_prompts = get_prompt_description_liveskt_list()
         ini_samp_prompts = get_prompt_description_animatesvg_list()
         random.shuffle(ini_samp_prompts)
@@ -563,12 +562,6 @@ def load_samp_prompts(dataset_name="vectorfusion", do_extend=True):
                               "The Girl with a Pearl Earring", "A portrait of a clown with a cute clown hat"]
 
         # --------------------------------------------------
-        # small_sty_list = []
-        # for prompt in small_prompts_list:
-        #     for style in style_list:
-        #         small_sty_list.append(prompt + ", " + style)
-
-        # 创建一个新的带风格的 prompts 列表
         small_sty_list = [
             f"{prompt}, {style}" for prompt in small_prompts_list for style in style_list]
 
@@ -576,13 +569,9 @@ def load_samp_prompts(dataset_name="vectorfusion", do_extend=True):
         random.shuffle(small_prompts_list)
         # --------------------------------------------------
 
-        # small_sty_list 在最前面
         small_prompts_list.extend(samp_prompts)
         samp_prompts = small_prompts_list
 
-        # random.shuffle(samp_prompts)
-
-    # -------------------------------------------
     return samp_prompts
 
 
@@ -712,7 +701,6 @@ def get_prompt_description_scene_list():
 
 def get_prompt_description_action_list():
     prompt_description_action_list = [
-        # "driving a red pickup truck",
         "raising a golden trophy",
         "rowing a boat",
 
@@ -738,14 +726,7 @@ def get_prompt_description_action_list():
         "jumping",
         "running",
 
-
         "salute",
-        # "hands on waist",
-        # "spread arms",
-        # "adjusting hair",
-        # "hand on headwear",
-        # "heart hands",
-        # "thumbs up",
 
         "talking on phone",
 
@@ -755,92 +736,7 @@ def get_prompt_description_action_list():
         "wearing high heels",
 
         "with a bird standing on the top",
-        # "flowers on the desk",
         "",
     ]
 
-    # prompt_description_list = [
-    #     "driving a red pickup truck",
-    #     "raising a golden trophy",
-    #     "taking photos",
-    #     "rowing a boat",
-
-    #     "bursting into tears",
-    #     "under an umbrella",
-
-    #     "playing the cello",
-
-    #     "listening to music",
-    #     "reading a book",
-    #     # "standing and reading a book",
-
-    #     "holding a bag",
-    #     "carrying a bag",
-    #     "wearing a backpack",
-
-    #     "jumping",
-    #     "running",
-    #     "playing a ball",
-
-    #     "sitting at the table",
-    #     "smiling and happy",
-    #     "wearing a cowboy hat",
-
-    #     "walking a dog",
-    #     "taking a selfie",
-    #     "going at skateboarding",
-    #     "holding coffee and laptop",
-
-    #     "with a bird standing on the top",
-    #     "flowers on the desk",
-    #     "",
-
-    #     # "diving",
-    #     # "playing a violin",
-    #     # "spreading wings",
-    #     # "flying",
-    #     # "greeting and saying hello",
-    #     # "holding a bag and saying hello",
-
-    #     # "with a bird standing on the roof of the car",
-    #     # "in Autumn with fallen leaves",
-    #     # "like the Arc de triumphed in paris",
-    #     # "pyramid in Egypt",
-    #     # "snow mountain",
-    #     # "in the desert with cactus",
-    # ]
-
     return prompt_description_action_list
-
-
-# -------------------------------------------
-def get_sign_append_list(sidx=-1):
-
-    # "_512", "_224"
-    # "_smlr_224", "_smlr_512", "_smlr_600"
-    # "_smlr_224_v2", "_smlr_512_v2", "_smlr_600_v2"
-    # "_smlr_224_vsd_v1", "_smlr_224_sds_v1"
-    # "_smlr_224_vsd", "_smlr_224_sds"
-    # "_smlr_224_vsd_2.1", "_smlr_224_sds_2.1"
-    # "_smlr_224_sds_1.5", "_smlr_224_vsd_1.5"
-
-    sign_append_list = ["", "_512", "_224",
-                        "_smlr/vecfusion_smlr_600", "_smlr/vecfusion_smlr_512", "_smlr/vecfusion_smlr_224",
-                        "_smlr/vecfusion_smlr_600_v2", "_smlr/vecfusion_smlr_512_v2", "_smlr/vecfusion_smlr_224_v2",
-                        "_smlr/vecfusion_smlr_224_vsd_v1", "_smlr/vecfusion_smlr_224_sds_v1",
-                        "_smlr/vecfusion_smlr_224_sds", "_smlr/vecfusion_smlr_224_vsd",
-                        "_smlr_224_sds_2.0", "_smlr_224_vsd_2.0", "_smlr_224_sds_2.1", "_smlr_224_vsd_2.1", "_smlr_224_sds_1.5", "_smlr_224_vsd_1.5",
-                        "_smlr_224_vsd_1.5_svgdream", "_smlr_224_vsd_1.5_test", "_smlr_224_vsd_1.5_test_pig", "_smlr_224_vsd_1.5_test_animal", "_smlr_224_vsd_1.5_test_animatesvg"]
-
-    # random.shuffle(sign_append_list)
-    sign_append_list = sign_append_list[::-1]
-
-    if (sidx == -1):
-        process_sign_append_list = sign_append_list
-
-    else:
-        tmp_sign_append = sign_append_list[sidx]
-        process_sign_append_list = [tmp_sign_append]
-
-    return process_sign_append_list
-# -------------------------------------------

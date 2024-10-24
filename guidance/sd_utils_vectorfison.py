@@ -66,22 +66,18 @@ def add_titles_to_images(viz_images, titles):
     to_pil = transforms.ToPILImage()
     images = [np.array(to_pil(img)) for img in viz_images]
 
-    # 设置标题参数
     font_scale = 1.0
     font_color = (0, 0, 0)  # 黑色
     font_thickness = 2
     title_height = 60
 
-    # 处理每张图片
     processed_images = []
     for i, image in enumerate(images):
-        # 为标题添加底部空间
         h, w, _ = image.shape
         title_area = np.ones((title_height, w, 3),
-                             dtype=np.uint8) * 255  # 白色区域
+                             dtype=np.uint8) * 255
         image_with_title_area = np.vstack((image, title_area))
 
-        # 为有标题的图片添加文本
         if i < len(titles):
             text_size = cv2.getTextSize(
                 titles[i], cv2.FONT_HERSHEY_SIMPLEX, font_scale, font_thickness)[0]
@@ -92,7 +88,6 @@ def add_titles_to_images(viz_images, titles):
 
         processed_images.append(image_with_title_area)
 
-    # 将处理后的图像转换回张量
     tensor_images = torch.stack([transforms.ToTensor()(
         Image.fromarray(img)) for img in processed_images])
 
@@ -135,30 +130,11 @@ class mSDSLoss(nn.Module):
         pipe = StableDiffusionPipeline.from_pretrained(
             model_key, torch_dtype=self.precision_t)
 
-        # Create model
-        # pipe = StableDiffusionPipeline.from_pretrained(
-        #     model_key,
-        #     scheduler=DPMSolverMultistepScheduler.from_pretrained(
-        #         model_key, subfolder="scheduler", torch_dtype=self.precision_t),
-        #     torch_dtype=self.precision_t)
-
-        # pipe.scheduler = DPMSolverMultistepScheduler.from_config(
-        #     model_key, subfolder="scheduler", torch_dtype=self.precision_t)
-
-        # pipe.scheduler = DDIMScheduler.from_pretrained(
-        #     model_key, subfolder="scheduler", torch_dtype=self.precision_t)
-
-        # self.scheduler = pipe.scheduler
-
-        # Example: "snowflake, <icon-style>"
-        # pipe.load_textual_inversion('textual_inversion/icon_style_embeds.bin')
-
         if vram_O:
             pipe.enable_sequential_cpu_offload()
             pipe.enable_vae_slicing()
             pipe.unet.to(memory_format=torch.channels_last)
             pipe.enable_attention_slicing(1)
-            # pipe.enable_model_cpu_offload()
         else:
             pipe.to(device)
 
@@ -167,27 +143,15 @@ class mSDSLoss(nn.Module):
         self.scheduler = DDIMScheduler.from_pretrained(
             model_key, subfolder="scheduler", torch_dtype=self.precision_t)
 
-        # self.scheduler = DPMSolverMultistepScheduler.from_pretrained(
-        #     model_key, subfolder="scheduler", torch_dtype=self.precision_t)
-
-        # self.scheduler = DPMSolverMultistepScheduler.from_config(
-        #     model_key, subfolder="scheduler", torch_dtype=self.precision_t)
-
         self.pipe = pipe
         self.vae = pipe.vae
         self.tokenizer = pipe.tokenizer
         self.text_encoder = pipe.text_encoder
         self.unet = pipe.unet
 
-        # del pipe
-
         self.num_train_timesteps = self.scheduler.config.num_train_timesteps
         self.min_step = int(self.num_train_timesteps * t_range[0])
         self.max_step = int(self.num_train_timesteps * t_range[1])
-        # dreambooth finetune 不会改变这些值
-        # self.num_train_timesteps:  1000
-        # self.min_step:  20
-        # self.max_step:  980
 
         # for convenience
         self.alphas = self.scheduler.alphas_cumprod.to(self.device)
@@ -197,25 +161,10 @@ class mSDSLoss(nn.Module):
         self.sigmas_sqrt = torch.sqrt(
             1 - self.scheduler.alphas_cumprod).to(self.device, dtype=self.precision_t)
 
-        # self.betas = self.scheduler.betas.to(self.device)
-        # alphas = 1.0 - self.betas
-        # alphas_cumprod = torch.cumprod(alphas, axis=0)
-        # self.sqrt_alphas_cumprod = torch.sqrt(alphas_cumprod)
-        # self.sqrt_1m_alphas_cumprod = torch.sqrt(1. - alphas_cumprod)
-
-        # scheduler set timesteps
-        # num_train_timesteps = len(self.scheduler.betas)
-        # assert self.num_train_timesteps == num_train_timesteps
-        # self.scheduler.set_timesteps(num_train_timesteps)
-
         pred_x0_total_timesteps = self.max_step - self.min_step + 1
         self.scheduler.set_timesteps(pred_x0_total_timesteps)
 
         self.base_prompt = "minimal flat 2d vector icon. lineal color. on a white background. trending on artstation; professional vector illustration; flat cartoon icon"
-
-        # self.base_negative_prompt = "(((text))),(((color))),(shading),background color,noise,dithering,gradient,detailed,out of frame,ugly,error,Illustration,watermark"
-
-        # self.base_negative_prompt = "(((text))),background color,noise,out of frame,ugly,error,watermark"
 
         self.base_negative_prompt = ""
 
@@ -294,15 +243,6 @@ class mSDSLoss(nn.Module):
             noise_pred = noise_pred_uncond + guidance_scale * \
                 (noise_pred_pos - noise_pred_uncond)
 
-        # # ---------------------------------
-        # # from dreamfusion
-        # # w(t), sigma_t^2
-        # w = (1 - self.alphas[t])
-        # # w:  tensor([0.1610], device='cuda:0')
-        # # grad_scale:  1 (不是guidance_scale!)
-        # grad = grad_scale * w[:, None, None, None] * (noise_pred - noise)
-        # # ---------------------------------
-
         # ---------------------------------
         # from threestudio
         w = (1 - self.alphas[t]).view(-1, 1, 1, 1)
@@ -313,9 +253,6 @@ class mSDSLoss(nn.Module):
 
         if save_guidance_path:
             with torch.no_grad():
-
-                # ---------------------------------
-
                 eps = noise
                 e_t = noise_pred
                 alpha_t = self.alphas_sqrt[t, None, None, None]
@@ -323,33 +260,19 @@ class mSDSLoss(nn.Module):
                 z_t = alpha_t * latents + sigma_t * eps
                 pred_z0 = (z_t - sigma_t * e_t) / alpha_t
 
-                # 计算每个通道的最小值和最大值
-                channel_min = grad.min(
-                    dim=-1)[0].min(dim=-1)[0]  # 沿着最后两个维度计算最小值
-                channel_max = grad.max(
-                    dim=-1)[0].max(dim=-1)[0]  # 沿着最后两个维度计算最大值
-                # [-2,2]
-
-                # 计算整个张量的最小值和最大值
                 min_val = grad.min()
                 max_val = grad.max()
 
-                # 归一化
                 normalized_grad = (grad - min_val) / (max_val - min_val)
 
-                # grad_vis_norm = (grad[:, :3, :, :] / 2 + 0.5).clamp(0, 1)
                 grad_vis_norm = (normalized_grad[:, :3, :, :]).clamp(0, 1)
 
                 vis_grad = F.interpolate(grad_vis_norm, size=(
                     512, 512), mode='bilinear', align_corners=False)
 
                 # ---------------------------------
-
                 result_hopefully_less_noisy_image_z0 = self.decode_latents(
                     pred_z0.to(latents.type(self.precision_t)))
-
-                # result_hopefully_less_noisy_image_x0 = self.decode_latents(
-                #     pred_x0.to(latents.type(self.precision_t)))
 
                 # visualize noisier image [0,1]
                 result_noisier_image = self.decode_latents(
@@ -361,15 +284,9 @@ class mSDSLoss(nn.Module):
                     [pred_rgb_512, result_noisier_image, result_hopefully_less_noisy_image_z0, vis_grad], dim=0)
 
                 # ---------------------------------
-
                 titles = ["t=" + str(t.item()),
                           'noisier_image', 'pred_z0', 'vis_grad']
                 viz_images = add_titles_to_images(viz_images, titles)
-
-                # save_image(viz_images, save_guidance_path)
-
-        # since we omitted an item in grad, we need to use the custom function to specify the gradient
-        # loss = SpecifyGradient.apply(latents, grad)
 
         # SpecifyGradient is not straghtforward, use a reparameterization trick instead
         target = (latents - grad).detach()
@@ -441,7 +358,6 @@ class mSDSLoss(nn.Module):
 
         # predict the noise residual with unet, NO grad!
         with torch.no_grad():
-
             noise_pred = self.predict_noise0_diffuser(unet=self.unet, latents_noisy=latents_noisy, text_embeddings=text_embeddings,
                                                       t=t, guidance_scale=guidance_scale, cross_attention_kwargs=unet_cross_attention_kwargs)
 
@@ -464,35 +380,23 @@ class mSDSLoss(nn.Module):
         # w = self.sqrt_1m_alphas_cumprod[t]**2
         # grad = w * (noise_pred - noise)
         grad = w * grad
-
         # ---------------------------------
-
         grad = torch.nan_to_num(grad)
 
         if save_guidance_path:
             with torch.no_grad():
-                # ---------------------------------
-
-                # total_timesteps = self.max_step - self.min_step + 1
-                # self.scheduler.set_timesteps(total_timesteps)
-
                 pred_latents = self.scheduler.step(
                     noise_pred.to('cpu'), t.to('cpu'), latents_noisy.to('cpu')).pred_original_sample.clone().detach().to(self.device)
 
                 pred_z0 = pred_latents
-                # pred_x0 = pred_latents
 
                 if generation_mode == 'vsd':
                     pred_latents_phi = self.scheduler.step(
                         noise_pred_phi.to('cpu'), t.to('cpu'), latents_noisy.to('cpu')).pred_original_sample.clone().detach().to(self.device)
 
                 # ---------------------------------
-
-                # 计算整个张量的最小值和最大值
                 min_val = grad.min()
                 max_val = grad.max()
-
-                # 归一化
                 normalized_grad = (grad - min_val) / (max_val - min_val)
 
                 # grad_vis_norm = (grad[:, :3, :, :] / 2 + 0.5).clamp(0, 1)
@@ -502,12 +406,8 @@ class mSDSLoss(nn.Module):
                     512, 512), mode='bilinear', align_corners=False)
 
                 # ---------------------------------
-
                 result_hopefully_less_noisy_image_z0 = self.decode_latents(
                     pred_z0.to(latents.type(self.precision_t)))
-
-                # result_hopefully_less_noisy_image_x0 = self.decode_latents(
-                #     pred_x0.to(latents.type(self.precision_t)))
 
                 if generation_mode == 'vsd':
                     image_x0_phi = self.decode_latents(
@@ -521,7 +421,6 @@ class mSDSLoss(nn.Module):
                 pred_rgb_512 = self.decode_latents(latents)
 
                 # ---------------------------------
-
                 if (generation_mode == 'vsd'):
                     viz_images = torch.cat(
                         [pred_rgb_512, result_noisier_image, result_hopefully_less_noisy_image_z0, image_x0_phi, vis_grad], dim=0)
@@ -537,10 +436,7 @@ class mSDSLoss(nn.Module):
 
                 viz_images = add_titles_to_images(viz_images, titles)
 
-                # save_image(viz_images, save_guidance_path)
-
         # -------------------------------------------
-
         # SpecifyGradient is not straghtforward, use a reparameterization trick instead
         target = (latents - grad).detach()
         # d(loss)/d(latents) = latents - target = latents - (latents - grad) = grad
@@ -565,10 +461,7 @@ class mSDSLoss(nn.Module):
         noisy_latents_phi = self.scheduler.add_noise(
             latents_phi, noise_phi, t_phi)
 
-        # 下面变量的对应关系
         latents_noisy = noisy_latents_phi.detach()
-        # noise = noise_phi
-        # t = t_phi
 
         # ---------------------------------
         loss_fn = nn.MSELoss()
@@ -676,20 +569,12 @@ class mSDSLoss(nn.Module):
         if isinstance(negative_prompts, str):
             negative_prompts = [negative_prompts]
 
-        # Prompts -> text embeds
-        # pos_embeds = self.get_text_embeds(prompts)  # [1, 77, 768]
-        # # neg_embeds = self.get_text_embeds(negative_prompts)
-        # neg_embeds = self.neg_embeds
-
-        # text_embeds = torch.cat(
-        #     [neg_embeds, pos_embeds], dim=0)  # [2, 77, 768]
-
         text_embeds = self.encode_text_posneg(
             prompt=prompts, negative_prompt=negative_prompts)
 
-        # Text embeds -> img latents
+        # Text embeds -> img latents [1, 4, 64, 64]
         latents = self.produce_latents(text_embeds, height=height, width=width, latents=latents,
-                                       num_inference_steps=num_inference_steps, guidance_scale=guidance_scale)  # [1, 4, 64, 64]
+                                       num_inference_steps=num_inference_steps, guidance_scale=guidance_scale)
 
         # Img latents -> imgs
         imgs = self.decode_latents(latents)  # [1, 3, 512, 512]

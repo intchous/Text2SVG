@@ -1,7 +1,6 @@
 import torch
 from torch.autograd import Function
 from torch import nn
-# from .vector_quantize_pytorch import VectorQuantize as VectorQuantizePytorch
 
 # from: https://github.com/pabloppp/pytorch-tools
 
@@ -165,33 +164,3 @@ if __name__ == '__main__':
     loss = 0.0
     loss += commit_loss * 0.25
     # loss += vq_loss # only if you didn't set the ema_loss to True
-    print("commit_loss: ", commit_loss)
-    # commit_loss:  tensor(0.9740)
-    print("vq_loss: ", vq_loss)
-    # vq_loss:  tensor(0.9740, grad_fn=<MeanBackward0>)
-    # print("qe: ", qe)
-    # qe的shape跟e的shape一样
-    print("qe.shape: ", qe.shape)
-    # qe.shape:  torch.Size([140, 1, 256])
-    # print("indices: ", indices)
-    print("indices.shape: ", indices.shape)
-    # indices.shape:  torch.Size([140, 1])
-    # indices.shape:  torch.Size([1, 16, 16])
-
-    vquantizer_pytorch = VectorQuantizePytorch(
-        dim=z_dim,
-        codebook_size=codebook_size,
-        # decay=0.8,
-        # commitment_weight=0.,
-        # use_cosine_sim=False,
-    )
-
-    quantized, indices, commit_loss = vquantizer_pytorch(e)
-    print("commit_loss: ", commit_loss)
-    # commit_loss:  tensor([0.9928], grad_fn=<AddBackward0>)
-
-    # print("quantized: ", quantized)
-    # print("quantized.shape: ", quantized.shape)
-    # print("indices: ", indices)
-    print("indices.shape: ", indices.shape)
-    # indices.shape:  torch.Size([140, 1])

@@ -7,37 +7,13 @@ Num = Union[int, float]
 
 
 class SVGTensor:
-    # Alert!!!!!!!!!
-    # COMMANDS_SIMPLIFIED 和 CMD_ARGS_MASK 的顺序要一一对应
-    #                       0    1    2    3     4      5     6
-    # COMMANDS_SIMPLIFIED = ["m", "l", "c", "a", "EOS", "SOS", "z"]
     COMMANDS_SIMPLIFIED = ["m", "l", "c", "EOS", "SOS"]
-
-    #                              rad  x  lrg sw  ctrl ctrl  end
-    #                              ius axs arc eep  1    2    pos
-    #                                   rot fg fg
-    # CMD_ARGS_MASK = torch.tensor([[0, 0, 0, 0, 0, 0, 0, 0, 0, 1, 1],   # m
-    #                               [0, 0, 0, 0, 0, 0, 0, 0, 0, 1, 1],   # l
-    #                               [0, 0, 0, 0, 0, 1, 1, 1, 1, 1, 1],   # c
-    #                               [0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0],   # EOS
-    #                               [0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0],   # SOS
-    #                               [0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0]])  # z
     CMD_ARGS_MASK = torch.tensor([[0, 0, 0, 0, 1, 1],   # m
                                   [0, 0, 0, 0, 1, 1],   # l
                                   [1, 1, 1, 1, 1, 1],   # c
                                   [0, 0, 0, 0, 0, 0],   # EOS
                                   [0, 0, 0, 0, 0, 0]])  # SOS
 
-    # class Index:
-    #     COMMAND = 0
-    #     RADIUS = slice(1, 3)
-    #     X_AXIS_ROT = 3
-    #     LARGE_ARC_FLG = 4
-    #     SWEEP_FLG = 5
-    #     START_POS = slice(6, 8)
-    #     CONTROL1 = slice(8, 10)
-    #     CONTROL2 = slice(10, 12)
-    #     END_POS = slice(12, 14)
     class Index:
         COMMAND = 0
         START_POS = slice(1, 3)
@@ -45,14 +21,6 @@ class SVGTensor:
         CONTROL2 = slice(5, 7)
         END_POS = slice(7, 9)
 
-    # class IndexArgs:
-    #     RADIUS = slice(0, 2)
-    #     X_AXIS_ROT = 2
-    #     LARGE_ARC_FLG = 3
-    #     SWEEP_FLG = 4
-    #     CONTROL1 = slice(5, 7)
-    #     CONTROL2 = slice(7, 9)
-    #     END_POS = slice(9, 11)
     class IndexArgs:
         CONTROL1 = slice(0, 2)
         CONTROL2 = slice(2, 4)
@@ -60,37 +28,11 @@ class SVGTensor:
 
     position_keys = ["control1", "control2", "end_pos"]
     all_position_keys = ["start_pos", *position_keys]
-    # arg_keys = ["radius", "x_axis_rot", "large_arc_flg", "sweep_flg", *position_keys]
-    # all_arg_keys = [*arg_keys[:4], "start_pos", *arg_keys[4:]]
     arg_keys = position_keys
     all_arg_keys = ["start_pos", *arg_keys]
     cmd_arg_keys = ["commands", *arg_keys]
     all_keys = ["commands", *all_arg_keys]
 
-    # def __init__(self, commands, radius, x_axis_rot, large_arc_flg, sweep_flg, control1, control2, end_pos,
-    #              seq_len=None, label=None, PAD_VAL=0, ARGS_DIM=256, filling=0):
-
-    #     self.commands = commands.reshape(-1, 1).float()
-
-    #     self.radius = radius.float()
-    #     self.x_axis_rot = x_axis_rot.reshape(-1, 1).float()
-    #     self.large_arc_flg = large_arc_flg.reshape(-1, 1).float()
-    #     self.sweep_flg = sweep_flg.reshape(-1, 1).float()
-
-    #     self.control1 = control1.float()
-    #     self.control2 = control2.float()
-    #     self.end_pos = end_pos.float()
-
-    #     self.seq_len = torch.tensor(len(commands)) if seq_len is None else seq_len
-    #     self.label = label
-
-    #     self.PAD_VAL = PAD_VAL
-    #     self.ARGS_DIM = ARGS_DIM
-
-    #     self.sos_token = torch.Tensor([self.COMMANDS_SIMPLIFIED.index("SOS")]).unsqueeze(-1)
-    #     self.eos_token = self.pad_token = torch.Tensor([self.COMMANDS_SIMPLIFIED.index("EOS")]).unsqueeze(-1)
-
-    #     self.filling = filling
     def __init__(self, commands, control1, control2, end_pos,
                  seq_len=None, label=None, PAD_VAL=0, ARGS_DIM=256, filling=0):
 
@@ -100,14 +42,17 @@ class SVGTensor:
         self.control2 = control2.float()
         self.end_pos = end_pos.float()
 
-        self.seq_len = torch.tensor(len(commands)) if seq_len is None else seq_len
+        self.seq_len = torch.tensor(
+            len(commands)) if seq_len is None else seq_len
         self.label = label
 
         self.PAD_VAL = PAD_VAL
         self.ARGS_DIM = ARGS_DIM
 
-        self.sos_token = torch.Tensor([self.COMMANDS_SIMPLIFIED.index("SOS")]).unsqueeze(-1)
-        self.eos_token = self.pad_token = torch.Tensor([self.COMMANDS_SIMPLIFIED.index("EOS")]).unsqueeze(-1)
+        self.sos_token = torch.Tensor(
+            [self.COMMANDS_SIMPLIFIED.index("SOS")]).unsqueeze(-1)
+        self.eos_token = self.pad_token = torch.Tensor(
+            [self.COMMANDS_SIMPLIFIED.index("EOS")]).unsqueeze(-1)
 
         self.filling = filling
 
@@ -119,18 +64,6 @@ class SVGTensor:
             start_pos.new_zeros(1, 2),
             start_pos
         ])
-
-    # @staticmethod
-    # def from_data(data, *args, **kwargs):
-    #     return SVGTensor(data[:, SVGTensor.Index.COMMAND], data[:, SVGTensor.Index.RADIUS], data[:, SVGTensor.Index.X_AXIS_ROT],
-    #                      data[:, SVGTensor.Index.LARGE_ARC_FLG], data[:, SVGTensor.Index.SWEEP_FLG], data[:, SVGTensor.Index.CONTROL1],
-    #                      data[:, SVGTensor.Index.CONTROL2], data[:, SVGTensor.Index.END_POS], *args, **kwargs)
-
-    # @staticmethod
-    # def from_cmd_args(commands, args, *nargs, **kwargs):
-    #     return SVGTensor(commands, args[:, SVGTensor.IndexArgs.RADIUS], args[:, SVGTensor.IndexArgs.X_AXIS_ROT],
-    #                      args[:, SVGTensor.IndexArgs.LARGE_ARC_FLG], args[:, SVGTensor.IndexArgs.SWEEP_FLG], args[:, SVGTensor.IndexArgs.CONTROL1],
-    #                      args[:, SVGTensor.IndexArgs.CONTROL2], args[:, SVGTensor.IndexArgs.END_POS], *nargs, **kwargs)
 
     @staticmethod
     def from_data(data, *args, **kwargs):
@@ -159,7 +92,8 @@ class SVGTensor:
 
         for key in self.arg_keys:
             v = self.__getattribute__(key)
-            self.__setattr__(key, torch.cat([v.new_full((1, v.size(-1)), self.PAD_VAL), v]))
+            self.__setattr__(key, torch.cat(
+                [v.new_full((1, v.size(-1)), self.PAD_VAL), v]))
 
         self.seq_len += 1
         return self
@@ -176,18 +110,21 @@ class SVGTensor:
 
         for key in self.arg_keys:
             v = self.__getattribute__(key)
-            self.__setattr__(key, torch.cat([v, v.new_full((1, v.size(-1)), self.PAD_VAL)]))
+            self.__setattr__(key, torch.cat(
+                [v, v.new_full((1, v.size(-1)), self.PAD_VAL)]))
 
         return self
 
     def pad(self, seq_len=51):
         pad_len = max(seq_len - len(self.commands), 0)
 
-        self.commands = torch.cat([self.commands, self.pad_token.repeat(pad_len, 1)])
+        self.commands = torch.cat(
+            [self.commands, self.pad_token.repeat(pad_len, 1)])
 
         for key in self.arg_keys:
             v = self.__getattribute__(key)
-            self.__setattr__(key, torch.cat([v, v.new_full((pad_len, v.size(-1)), self.PAD_VAL)]))
+            self.__setattr__(key, torch.cat(
+                [v, v.new_full((pad_len, v.size(-1)), self.PAD_VAL)]))
 
         return self
 
@@ -226,7 +163,8 @@ class SVGTensor:
         real_commands = self._get_real_commands_mask()
         data_real_commands = data[real_commands]
 
-        start_pos = data_real_commands[:-1, SVGTensor.IndexArgs.END_POS].clone()
+        start_pos = data_real_commands[:-1,
+                                       SVGTensor.IndexArgs.END_POS].clone()
 
         data_real_commands[1:, SVGTensor.IndexArgs.CONTROL1] -= start_pos
         data_real_commands[1:, SVGTensor.IndexArgs.CONTROL2] -= start_pos
@@ -274,15 +212,18 @@ class SVGTensor:
             torch.zeros(4, 4),  # "z"
         ], device=device)
 
-        commands, pos = self.commands.reshape(-1).long(), self.get_data(self.all_position_keys).reshape(-1, 4, 2)
-        inds = (commands == self.COMMANDS_SIMPLIFIED.index("l")) | (commands == self.COMMANDS_SIMPLIFIED.index("c"))
+        commands, pos = self.commands.reshape(-1).long(), self.get_data(
+            self.all_position_keys).reshape(-1, 4, 2)
+        inds = (commands == self.COMMANDS_SIMPLIFIED.index("l")) | (
+            commands == self.COMMANDS_SIMPLIFIED.index("c"))
         commands, pos = commands[inds], pos[inds]
 
         Z_coeffs = torch.matmul(Q[commands], pos)
 
         # Last point being first point of next command, we drop last point except the one from the last command
         sample_points = torch.matmul(Z, Z_coeffs)
-        sample_points = torch.cat([sample_points[:, :-1].reshape(-1, 2), sample_points[-1, -1].unsqueeze(0)])
+        sample_points = torch.cat(
+            [sample_points[:, :-1].reshape(-1, 2), sample_points[-1, -1].unsqueeze(0)])
 
         return sample_points
 

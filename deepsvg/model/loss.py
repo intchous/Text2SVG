@@ -61,11 +61,9 @@ def mkld_loss(mu, log_var, kld_weight=0.00001, kl_tolerance=0.1, use_sum=True):
 
     kld_term = 1.0 + log_var - mu.pow(2) - torch.exp(log_var + epsilon)
     if (use_sum):
-        # 每个batch内求和, 在批次维度上求平均
         kld_bat_sum = -0.5 * torch.sum(kld_term)
         kld_loss = kld_bat_sum / mu.size(0)
     else:
-        # 所有样本的平均值
         kld_loss = -0.5 * torch.mean(kld_term)
 
     # kld_loss = torch.clamp(kld_loss, min=kl_tolerance)
@@ -253,7 +251,8 @@ def get_target_distr(p_target, n, device="cuda"):
     distr_target = get_length_distribution(p_target_clockwise, normalize=True)
 
     # Find closest target point for each predicted point
-    distances = torch.cdist(distr_pred.unsqueeze(-1), distr_target.unsqueeze(-1))
+    distances = torch.cdist(distr_pred.unsqueeze(-1),
+                            distr_target.unsqueeze(-1))
     matching = distances.argmin(dim=-1)
 
     # Select subset of target points based on matching
@@ -301,37 +300,6 @@ def get_target_distr_batch(p_target, n, device="cuda"):
     return p_target_sub, matching
 
 
-def svg_emd_loss_v1(p_pred, p_target, p_target_sub=None, matching=None,
-                    first_point_weight=False, return_matched_indices=False):
-
-    n, m = len(p_pred), len(p_target)
-
-    if n == 0:
-        return 0.
-
-    if p_target_sub is None or matching is None:
-        p_target_sub, matching = get_target_distr(
-            p_target, n, device=p_pred.device)
-
-    # EMD
-    # Find the best reorder (保持p_pred点的顺序?)
-    i = torch.argmin(torch.stack(
-        [torch.norm(p_pred - reorder(p_target_sub, i), dim=-1).mean() for i in range(n)]))
-
-    p_target_sub_reordered = reorder(p_target_sub, i)
-    losses = torch.norm(p_pred - p_target_sub_reordered, dim=-1)
-
-    if first_point_weight:
-        weights = torch.ones_like(losses)
-        weights[0] = 10.
-        losses = losses * weights
-
-    if return_matched_indices:
-        return losses.mean(), (p_pred, p_target, reorder(matching, i))
-
-    return losses.mean()
-
-
 def svg_emd_loss(p_pred, p_target, p_target_sub=None, matching=None):
 
     n, m = len(p_pred), len(p_target)
@@ -349,58 +317,16 @@ def svg_emd_loss(p_pred, p_target, p_target_sub=None, matching=None):
     reordered_ptarget_subs = torch.index_select(
         p_target_sub, 0, roll_indices.view(-1)).view(n, n, -1)
 
-    # roll_indices.shape:  torch.Size([80, 80])
-    # reordered_ptarget_subs.shape:  torch.Size([80, 80, 2])
-
     distances = torch.norm(p_pred.unsqueeze(
         0) - reordered_ptarget_subs, dim=-1)
-    # distances.shape:  torch.Size([80, 80])
 
     mean_distances = distances.mean(dim=-1)
 
     i = torch.argmin(mean_distances)
 
     p_target_sub_reordered = reordered_ptarget_subs[i]
-    # p_target_sub_reordered.shape:  torch.Size([80, 2])
 
     losses = torch.norm(p_pred - p_target_sub_reordered, dim=-1)
-
-    return losses.mean()
-
-
-def svg_emd_loss_batch_v1(p_pred, p_target, p_target_sub=None, matching=None,
-                          first_point_weight=False, return_matched_indices=False):
-    b, n, _ = p_pred.size()
-
-    if n == 0:
-        return 0.
-
-    if p_target_sub is None or matching is None:
-        p_target_sub, matching = get_target_distr_batch(
-            p_target, n, device=p_pred.device)
-
-    # EMD
-    # Compute reorder loss for every possible reordering
-    reorder_loss = torch.stack(
-        [torch.norm(p_pred - reorder_batch(p_target_sub, i),
-                    dim=-1).mean(dim=1) for i in range(n)],
-        dim=1
-    )
-    best_reorder_indices = torch.argmin(reorder_loss, dim=1)
-
-    # Reorder based on the best indices
-    p_target_sub_reordered = reorder_batch(p_target_sub, best_reorder_indices)
-
-    losses = torch.norm(p_pred - p_target_sub_reordered, dim=-1)
-
-    if first_point_weight:
-        weights = torch.ones_like(losses)
-        weights[:, 0] = 10.
-        losses *= weights
-
-    if return_matched_indices:
-        reordered_matching = reorder_batch(matching, best_reorder_indices)
-        return losses.mean(), (p_pred, p_target, reordered_matching)
 
     return losses.mean()
 
@@ -435,17 +361,9 @@ def svg_emd_loss_batch(p_pred, p_target, p_target_sub=None, matching=None):
     reordered_ptarget_subs = p_target_sub[torch.arange(
         b)[:, None, None], roll_indices_batch]
 
-    # print("roll_indices_batch.shape: ", roll_indices_batch.shape)
-    # print("reordered_ptarget_subs.shape: ", reordered_ptarget_subs.shape)
-    # roll_indices_batch.shape:  torch.Size([12, 80, 80])
-    # reordered_ptarget_subs.shape:  torch.Size([12, 80, 80, 2])
-
     # Compute distances for all reorderings and find the optimal permutation
     distances = torch.norm(
         p_pred[:, None, :, :] - reordered_ptarget_subs, dim=-1)
-
-    # print("distances.shape: ", distances.shape)
-    # distances.shape:  torch.Size([12, 80, 80])
 
     mean_distances = distances.mean(dim=-1)
     # Get the index of the minimum mean distance for each batch
@@ -455,16 +373,8 @@ def svg_emd_loss_batch(p_pred, p_target, p_target_sub=None, matching=None):
     batch_indices = torch.arange(b, device=p_pred.device)
     p_target_sub_reordered = reordered_ptarget_subs[batch_indices, :, i]
 
-    # print("p_target_sub_reordered.shape: ", p_target_sub_reordered.shape)
-    # p_target_sub_reordered.shape:  torch.Size([12, 80, 2])
-
-    # print("p_pred.shape: ", p_pred.shape)
-    # p_pred.shape:  torch.Size([12, 80, 2])
-
     losses_batch = torch.norm(
         p_pred - p_target_sub_reordered, dim=-1).mean(dim=-1)
-    # print("losses_batch.shape: ", losses_batch.shape)
-    # losses_batch.shape:  torch.Size([12])
 
     return losses_batch.mean()
 
@@ -479,63 +389,24 @@ def simplified_svg_emd_loss(p_pred, p_target, p_target_sub=None, matching=None):
         p_target_sub, matching = get_target_distr(
             p_target, n, device=p_pred.device)
 
-    # 找到p_target_sub中距离p_pred的第一个点最近的那个点的索引
     distances_to_first_point = torch.norm(p_target_sub - p_pred[0], dim=-1)
     start_idx = torch.argmin(distances_to_first_point)
 
-    # 使用找到的起始点重新排序p_target_sub
     reordered_p_target_sub = torch.roll(
         p_target_sub, shifts=(-start_idx.item(),), dims=0)
 
-    # 计算两个路径之间的点对点距离
     losses = torch.norm(p_pred - reordered_p_target_sub, dim=-1)
 
     return losses.mean()
 
 
-def svg_emd_loss_same_v1(p_pred, p_target, first_point_weight=False, return_matched_indices=False):
-    # p_pred 和 p_target 有相同数量的点
-    n, _ = p_pred.size()
-
-    if n == 0:
-        return 0.
-
-    p_target_clockwise = make_clockwise(p_target)
-
-    # Compute reorder loss for every possible reordering
-    all_losses = torch.stack(
-        [torch.norm(p_pred - reorder(p_target_clockwise, i), dim=-1).mean()
-         for i in range(n)]
-    )
-
-    best_reorder_index = torch.argmin(all_losses)
-    p_target_reordered = reorder(p_target_clockwise, best_reorder_index)
-
-    losses = torch.norm(p_pred - p_target_reordered, dim=-1)
-
-    if first_point_weight:
-        weights = torch.ones_like(losses)
-        weights[0] = 10.
-        losses *= weights
-
-    if return_matched_indices:
-        reordered_matching = reorder(torch.arange(
-            n, device=p_pred.device), best_reorder_index)
-        return losses.mean(), (p_pred, p_target, reordered_matching)
-
-    return losses.mean()
-
-
 def svg_emd_loss_same(p_pred, p_target):
-    # p_pred 和 p_target 有相同数量的点
     n, _ = p_pred.size()
 
     if n == 0:
         return 0.
 
-    # p_target_clockwise = make_clockwise(p_target)
     p_target_clockwise = p_target
-    # assert is_clockwise(p_target_clockwise)
 
     # Create a tensor containing all reordered versions of p_target_clockwise
     indices = torch.arange(n, device=p_pred.device).unsqueeze(0).repeat(n, 1)

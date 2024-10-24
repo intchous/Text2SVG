@@ -3,7 +3,6 @@ import numpy as np
 from enum import Enum
 import torch
 from typing import List, Union
-# from deepsvg import utils
 Num = Union[int, float]
 float_type = (int, float, np.float32)
 

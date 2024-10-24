@@ -58,12 +58,10 @@ def load_target_new(fp, img_size=64):
     target = data_transforms(target)
     target = target[0]
     target = target.unsqueeze(0)
-    # gt = data_transforms(target).unsqueeze(0).to(device)
-    # print("gt.shape = ", gt.shape)
     return target
 
 
-def load_tartget(fp):
+def load_target(fp):
     target = PIL.Image.open(fp)
     if target.mode == "RGBA":
         # Create a white rgba background
@@ -119,17 +117,13 @@ class SVGDataset_nopadding(Dataset):
             if self.transform:
                 points = self.transform(points)
 
-            # fixed_length 是 控制点的个数
             # Truncate if sequence is too long
             if points.shape[0] > self.fixed_length:
                 points = points[:self.fixed_length]
 
-            # assert points.shape[0] == self.fixed_length
-
             # Compute the cubics segments
             cubics = get_cubic_segments_from_points(
                 points=points, num_control_points=num_control_points)
-            # cubics.shape: torch.Size([10, 4, 2])
 
             desired_cubics_length = self.fixed_length // 3
 
@@ -143,14 +137,13 @@ class SVGDataset_nopadding(Dataset):
                     if (self.use_model_fusion):
                         path_img = load_target_new(im_path)
                     else:
-                        path_img = load_tartget(im_path)
+                        path_img = load_target(im_path)
 
             res_data = {
                 # control points
                 "points": points,
                 # cubics segments
                 "cubics": cubics,
-                # 原始长度 (控制点)
                 "lengths": self.fixed_length,
                 "filepaths": filepath,
                 "path_img": path_img
@@ -199,7 +192,6 @@ class SVGDataset(Dataset):
         if self.transform:
             points = self.transform(points)
 
-        # fixed_length 是 控制点的个数
         # Truncate if sequence is too long
         len_points = points.shape[0]
         if len_points > self.fixed_length - 1:
@@ -241,35 +233,19 @@ class SVGDataset(Dataset):
                 if (self.use_model_fusion):
                     path_img = load_target_new(im_path)
                 else:
-                    path_img = load_tartget(im_path)
+                    path_img = load_target(im_path)
 
         res_data = {
             # control points
             "points": points,
             # cubics segments
             "cubics": cubics,
-            # 原始长度 + 1
             "lengths": len_points,
             "filepaths": filepath,
             "path_img": path_img
         }
 
         return res_data
-
-
-def collate_fn_rnnpad(batch):
-    # Append end token to each sequence in the batch
-    batch = [torch.cat((seq, torch.tensor(
-        [[-1., -1.]], dtype=torch.float32)), dim=0) for seq in batch]
-
-    # Compute sequence lengths
-    lengths = [len(seq) for seq in batch]
-
-    # Pad the sequences
-    batch = nn.utils.rnn.pad_sequence(
-        batch, batch_first=True, padding_value=-1)
-
-    return batch, lengths
 
 
 def collate_fn(batch):
@@ -310,7 +286,6 @@ def get_segments(pathObj):
     # segList = (lines, quadrics, cubics)
     idx = 0
     total_points = pathObj.points.shape[0]
-    # pathObj.points.shape:  torch.Size([21, 2])
 
     for ncp in pathObj.num_control_points.numpy():
         pt1 = pathObj.points[idx]
@@ -320,8 +295,6 @@ def get_segments(pathObj):
             pt2 = pathObj.points[(idx + 1) % total_points]
             lines.append(pt1)
             lines.append(pt2)
-            # lines.append((pt1, pt2))
-            # lines.append((idx, (idx+1) % total_points))
             idx += 1
         elif ncp == 1:
             segments.append((1, len(quadrics)))
@@ -330,8 +303,6 @@ def get_segments(pathObj):
             quadrics.append(pt1)
             quadrics.append(pt2)
             quadrics.append(pt3)
-            # quadrics.append((pt1, pt2, pt3))
-            # quadrics.append((idx, (idx+1), (idx+2) % total_points))
             idx += ncp+1
         elif ncp == 2:
             segments.append((2, len(cubics)))
@@ -343,8 +314,6 @@ def get_segments(pathObj):
             cubics.append(pt3)
             cubics.append(pt4)
 
-            # cubics.append((pt1, pt2, pt3, pt4))
-            # cubics.append((idx, (idx+1), (idx+2), (idx+3) % total_points))
             idx += ncp + 1
 
     # total_points/3*4
@@ -354,9 +323,7 @@ def get_segments(pathObj):
 
 def get_cubic_segments_mask(lengths, max_pts_len_thresh, device="cuda"):
     cubic_lengths = (lengths - 1) // 3
-    # cubic_lengths:  tensor([ 4, 10, 10,  6,  8,  6, 10,  6])
     max_cubics_length = (max_pts_len_thresh - 1) // 3
-    # max_cubics_length:  20
 
     # Create the mask tensor
     cubics_mask = torch.arange(max_cubics_length).unsqueeze(
@@ -367,8 +334,6 @@ def get_cubic_segments_mask(lengths, max_pts_len_thresh, device="cuda"):
         -1).unsqueeze(-1).expand(-1, -1, 4, 2).float()
 
     cubics_mask = cubics_mask.to(device)
-    # print("cubics_mask.shape: ", cubics_mask.shape)
-    # cubics_mask.shape:  torch.Size([8, 20, 4, 2])
 
     return cubics_mask, cubic_lengths
 
@@ -377,7 +342,6 @@ def get_cubic_segments_from_points(points, num_control_points):
     cubics = []
     idx = 0
     total_points = points.shape[0]
-    # points.shape:  torch.Size([21, 2])
 
     for ncp in num_control_points.numpy():
         assert ncp == 2
@@ -410,20 +374,16 @@ def cubic_segments_to_points(cubics):
     num_segments = cubics.shape[0]
     points_list = []
 
-    # 处理第一个segment
     first_segment = cubics[0]
-    points_list.extend([pt for pt in first_segment[:-1]])  # 只添加前三个点
+    points_list.extend([pt for pt in first_segment[:-1]])
 
-    # 遍历其他所有的segment
     for idx in range(1, num_segments):
-        prev_end = cubics[idx-1][3]  # 前一个段的ed点
-        current_start = cubics[idx][0]  # 当前段的st点
+        prev_end = cubics[idx-1][3]
+        current_start = cubics[idx][0]
 
-        # 计算共用点
         shared_point = (prev_end + current_start) / 2.0
         points_list.append(shared_point)
 
-        # 加入当前段的control1, control2
         points_list.extend([pt for pt in cubics[idx][1:3]])
 
     convert_points = torch.stack(points_list)
@@ -527,7 +487,7 @@ def sample_bezier_batch(cubics, k=5):
     return sampled_points
 
 
-def load_init_circle_cubics(circle_svg_fp="./2719851_cubic_3_r0_diffvg_optm.svg", transform=None):
+def load_init_circle_cubics(circle_svg_fp="../vae_dataset/circle_10.svg", transform=None):
 
     canvas_width, canvas_height, shapes, shape_groups = pydiffvg.svg_to_scene(
         circle_svg_fp)
@@ -583,12 +543,6 @@ def split_trte_cmd_pts(svg_meta_fp, max_cmd_len_thresh=16, max_pts_len_thresh=53
     avg_len = max_len_group_np.mean()
     max_len = max_len_group_np.max()
     min_len = max_len_group_np.min()
-    # Average length: 12.502676752255912
-    print(f"Average length: {avg_len}")
-    # Max length: 2681
-    print(f"Max length: {max_len}")
-    # Min length: 3
-    print(f"Min length: {min_len}")
 
     cond_max_len = (max_len_group_np < max_cmd_len_thresh) & (
         num_pts_np < max_pts_len_thresh + 10)
@@ -596,8 +550,6 @@ def split_trte_cmd_pts(svg_meta_fp, max_cmd_len_thresh=16, max_pts_len_thresh=53
 
     # If you want to extract the "id" column from the filtered data and add ".svg" extension:
     remove_long_file_list = (filtered_data["id"] + ".svg").tolist()
-    # print("len_remove_long_file_list2: ", len(remove_long_file_list))
-    # print("samples: ", remove_long_file_list[:10])
 
     # split train and test
     random.shuffle(remove_long_file_list)
@@ -628,35 +580,13 @@ def split_trte_pts(svg_meta_fp, svg_data_dir, file_list_train_fp, file_list_test
     avg_len = num_pts_np.mean()
     max_len = num_pts_np.max()
     min_len = num_pts_np.min()
-    # Average length: 12.502676752255912
-    print(f"Average length: {avg_len}")
-    # Max length: 2681
-    print(f"Max length: {max_len}")
-    # Min length: 3
-    print(f"Min length: {min_len}")
 
     avg_area = area_np.mean()
     max_area = area_np.max()
     min_area = area_np.min()
-    print(f"Average area: {avg_area}")
-    print(f"Max area: {max_area}")
-    print(f"Min area: {min_area}")
 
     # ----------------------------------------
-    bins = np.arange(min_area, max_area, 500)
-    # 面积直方图
-    counts, edges = np.histogram(area_np, bins=bins)
-    # for i in range(len(bins) - 1):
-    #     bin_min = bins[i]
-    #     bin_max = bins[i + 1] - 1
-    #     print(f"{bin_min} and {bin_max}: {counts[i]}")
-    # ----------------------------------------
-
-    # -----------------------------------------------
-    # 构造bins, 从min到max, 每隔10; max_len + 10 确保max_len包含在最后一个bin中
-    # 10, 22
     bins = np.arange(min_len, min_len + 400, 15)
-    # 计算直方图
     counts, edges = np.histogram(num_pts_np, bins=bins)
     sum_counts = np.sum(counts)
 
@@ -728,8 +658,7 @@ def split_trte_pts(svg_meta_fp, svg_data_dir, file_list_train_fp, file_list_test
         ".csv", "_" + bin_ind + ".csv")
     # save_filelist_csv(file_list_test, file_list_test_img_fp)
 
-    # 计算直方图
-    log_data = np.log1p(num_pts_np)  # 使用log1p来避免对数为0的情况
+    log_data = np.log1p(num_pts_np)
     counts, bins, patches = plt.hist(
         log_data, bins=30, edgecolor='k', alpha=0.65)
 
@@ -750,10 +679,7 @@ def split_trte_pts(svg_meta_fp, svg_data_dir, file_list_train_fp, file_list_test
 
     # extract the "id" column from the filtered data and add ".svg" extension:
     remove_long_file_list = (filtered_data["id"] + ".svg").tolist()
-    print("len_remove_long_file_list2: ", len(remove_long_file_list))
-    # print("samples: ", remove_long_file_list[:10])
 
-    # 只保留存在的文件
     existing_remove_long_file_list = []
     for file in remove_long_file_list:
         if os.path.exists(os.path.join(svg_data_dir, file)):
@@ -767,7 +693,6 @@ def split_trte_pts(svg_meta_fp, svg_data_dir, file_list_train_fp, file_list_test
                 existing_remove_long_file_list.append(file)
 
     remove_long_file_list = existing_remove_long_file_list
-    print("len_remove_long_file_list3: ", len(remove_long_file_list))
 
     # split train and test
     sep_res = split_train_test(remove_long_file_list)

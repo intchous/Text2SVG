@@ -1,9 +1,6 @@
 import numpy as np
 from .utils import *
 
-# from geomloss import SamplesLoss
-# from emd import EMDLoss
-
 
 def chamfer_loss(x, y):
     d = torch.cdist(x, y)
@@ -38,12 +35,9 @@ def svg_emd_loss(p_pred, p_target,
     # Compute matching
     d = torch.cdist(distr_pred.unsqueeze(-1), distr_target.unsqueeze(-1))
     matching = d.argmin(dim=-1)
-    # p_target_sub是与n个均匀分割点最接近的p_target中的点?
     p_target_sub = p_target[matching]
 
-    # EMD
-    # Find the best reorder (保持p_pred点的顺序?)
-    # i = np.argmin([torch.norm(p_pred - reorder(p_target_sub, i), dim=-1).mean() for i in range(n)])
+    # EMD Find the best reorder
     i = torch.argmin(torch.stack(
         [torch.norm(p_pred - reorder(p_target_sub, i), dim=-1).mean() for i in range(n)]))
 

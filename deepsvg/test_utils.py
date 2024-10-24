@@ -80,7 +80,6 @@ def pts_to_pathObj(convert_points):
     return path
 
 
-# 注意: 这里的affine_transform是以坐标原点为中心的
 def apply_affine_transform_origin(points, theta, tx, ty, s):
     """
     Apply affine transformation, including rotation, translation, and overall scaling.
@@ -104,7 +103,6 @@ def apply_affine_transform_origin(points, theta, tx, ty, s):
 
 
 def apply_affine_transform(points, theta, tx, ty, s):
-    # 以points中心进行affine
     """
     Apply affine transformation, including rotation, translation, and overall scaling.
     """
@@ -141,22 +139,15 @@ def cubics_to_points_affine(cubics, theta, tx, ty, s, s_norm, h=224, w=224, use_
 
     # Clamp the values of convert_points_ini to be in [0,1]
     if (use_affine_norm):
-        # convert_points_ini = torch.clamp(convert_points_ini, 0, 1)
-        # convert_points = torch.clamp(convert_points, 0, 1)
         convert_points_ini_trans = s_norm.inverse_transform(convert_points_ini)
         convert_points_trans = s_norm.inverse_transform(convert_points)
-
         return convert_points_trans, convert_points_ini_trans
 
     else:
-        # convert_points_ini = torch.clamp(convert_points_ini, 0, 1*h)
-        # convert_points = torch.clamp(convert_points, 0, 1*h)
-
         return convert_points, convert_points_ini
 
 
 def z_to_affine_pts(z, theta, tx, ty, s, model, s_norm, h=224, w=224, use_affine_norm=False):
-    # 使用z生成点序列 (每生成一条path都调用1次, 太耗时了)
     generated_data = model(
         args_enc=None, args_dec=None, z=z.unsqueeze(1).unsqueeze(2))
     generated_pts = generated_data["args_logits"]
@@ -186,7 +177,6 @@ def recon_to_affine_pts(recon_data_output, theta, tx, ty, s, s_norm, h=224, w=22
     ini_cubics_batch = recon_data_output.view(
         bat_s, -1, 4, 2)
     ini_cubics = ini_cubics_batch[0]
-    # ini_cubics.shape:  torch.Size([10, 4, 2])
 
     if (use_affine_norm):
         ini_cubics_trans = ini_cubics
@@ -214,7 +204,7 @@ def paths_to_shapes(path_list, fill_color_list, stroke_width_list=None, stroke_c
     if stroke_width_list is not None:
         for i, path in enumerate(path_list):
             path.stroke_width = stroke_width_list[i]
-    
+
     tp_shapes = path_list
     tp_shape_groups = [
         pydiffvg.ShapeGroup(
@@ -244,7 +234,6 @@ def save_paths_svg(path_list,
         ini_path.stroke_width = stroke_width_list[pi]
         tp_shapes.append(ini_path)
 
-        # fill_color=torch.FloatTensor([0.5, 0.5, 0.5, 1.0])
         tp_fill_color = fill_color_list[pi]
 
         tp_path_group = pydiffvg.ShapeGroup(shape_ids=torch.LongTensor([pi]),
@@ -286,48 +275,6 @@ def render_and_compose(tmp_paths_list, color_list, stroke_width_list=None, strok
     return recon_imgs, combined_img
 
 
-def render_and_blend(tmp_paths_list, color_list, w=224, h=224, svg_path_fp="", para_bg=None, render_func=None, device="cuda"):
-    if para_bg is None:
-        para_bg = torch.tensor(
-            [1., 1., 1.], requires_grad=False, device=device)
-    if (render_func is None):
-        render_func = pydiffvg.RenderFunction.apply
-
-    if len(tmp_paths_list) == 0:
-        return None
-
-    # 预先分配内存，存储所有渲染的路径图像
-    all_images = torch.zeros(len(tmp_paths_list), 4, h, w, device=device)
-
-    # 渲染每个路径，并存储到all_images中
-    for idx, (path, color) in enumerate(zip(tmp_paths_list, color_list)):
-        tp_shapes, tp_shape_groups = save_paths_svg(
-            path_list=[path], fill_color_list=[color], svg_path_fp=svg_path_fp, canvas_height=h, canvas_width=w)
-
-        scene_args = pydiffvg.RenderFunction.serialize_scene(
-            w, h, tp_shapes, tp_shape_groups)
-        img = render_func(w, h, 2, 2, 0, None, *scene_args)
-        img = img.permute(2, 0, 1)  # HWC -> CHW
-        all_images[idx] = img
-
-    # 按照composite函数的逻辑进行合成
-    n = len(tmp_paths_list)
-    alpha = (1 - all_images[n - 1, 3:4])
-    rgb = all_images[n - 1, :3] * all_images[n - 1, 3:4]
-    for i in reversed(range(n-1)):
-        alpha_comp = (1 - all_images[i, 3:4])
-        rgb = rgb + all_images[i, :3] * all_images[i, 3:4] * alpha
-        alpha = alpha * alpha_comp
-
-    # Composite with the background
-    combined_rgb = rgb + alpha * para_bg.unsqueeze(0).unsqueeze(2).unsqueeze(3)
-    # rgb.shape:  torch.Size([3, 224, 224])
-    # combined_rgb.shape:  torch.Size([1, 3, 224, 224])
-
-    # Combined image is in NCHW format
-    return combined_rgb, combined_rgb.permute(0, 2, 3, 1).squeeze(0)
-
-
 # ----------------------------------------------------
 def regularization_loss(z):
     mean = z.mean()
@@ -352,7 +299,7 @@ def safe_pow(t, exponent, eps=1e-6):
 
 def opacity_penalty(colors, coarse_learning=True):
     factor = 1 if coarse_learning else 0
-    alpha = colors[:, 3]  # 假设alpha在颜色张量的最后一维
+    alpha = colors[:, 3]
     if coarse_learning:
         penalty = factor * safe_pow(alpha, 0.5).mean()
     else:
@@ -370,7 +317,7 @@ def binary_alpha_penalty_sigmoid(colors):
 
 def binary_alpha_penalty_l1(colors):
     alpha = colors[:, 3]
-    loss = torch.mean(torch.min(alpha, 1 - alpha))  # 使用L1损失
+    loss = torch.mean(torch.min(alpha, 1 - alpha))
     return loss
 
 

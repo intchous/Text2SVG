@@ -818,7 +818,6 @@ if __name__ == "__main__":
     log_dir = "./transformer_vae_logs/"
     signature = "ini_svgs_470510"
 
-    # 获取当前的 absolute_base_dir
     # absolute_base_dir = os.path.dirname(os.path.dirname(
     #     os.path.dirname(os.path.abspath(__file__)))) + "/"
     # print("absolute_base_dir: ", absolute_base_dir)
