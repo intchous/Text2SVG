@@ -3,6 +3,7 @@ import yaml
 from collections import OrderedDict
 import numpy as np
 import json
+import torch
 
 try:
     from yaml import CLoader as Loader, CDumper as Dumper
@@ -52,7 +53,6 @@ def dict2str(opt, indent_l=1):
 
 
 class NoneDict(dict):
-
     def __missing__(self, key):
         return None
 
@@ -71,14 +71,17 @@ def dict_to_nonedict(opt):
 
 
 class NpEncoder(json.JSONEncoder):
-
     def default(self, obj):
+        if isinstance(obj, torch.Tensor):
+            obj = obj.detach().cpu().numpy()
+
         if isinstance(obj, np.integer):
             return int(obj)
         elif isinstance(obj, np.floating):
             return float(obj)
         elif isinstance(obj, np.ndarray):
             return obj.tolist()
+
         else:
             return super(NpEncoder, self).default(obj)
 
@@ -87,3 +90,10 @@ def sv_json(sv_list, sv_fp):
     json_str = json.dumps(sv_list, ensure_ascii=False, indent=1, cls=NpEncoder)
     with open(sv_fp, 'w', encoding='utf-8') as f:
         f.write(json_str)
+
+
+def load_json(file_path):
+    with open(file_path, 'r', encoding='utf-8') as file:
+        json_data = json.load(file)
+
+    return json_data

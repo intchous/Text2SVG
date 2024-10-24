@@ -1,4 +1,6 @@
-# Text2SVG
+# Text-to-Vector Generation with Neural Path Representation
+
+**Code for the paper [Text-to-Vector Generation with Neural Path Representation](https://arxiv.org/abs/2405.10317) (SIGGRAPH 2024).**
 
 ## Installation
 
@@ -63,7 +65,12 @@ cd ..
 rm -rf pypotrace
 ```
 
-Note: The repository is still in progress, and the code needs to be optimized for clarity and simplicity.
+**Note:** The repository is still in progress, and the code needs to be optimized for clarity and simplicity.
+
+### TODO
+
+1. Add training and inference scripts.
+2. Add explanations for parameters.
 
 ## Text to SVG with VSD
 
@@ -71,8 +78,36 @@ Note: The repository is still in progress, and the code needs to be optimized fo
 python t2svg_vsd.py
 ```
 
+## Generate Guidance Image
+
+```
+python gen_img2img.py
+```
+
 ## SVG Optimization with Image Guidance
 
 ```
 python img_guidance.py
 ```
+
+## Citation
+
+If you find this work useful, please cite our paper:
+
+```bib
+@article{zhang2024text,
+  title={Text-to-Vector Generation with Neural Path Representation},
+  author={Zhang, Peiying and Zhao, Nanxuan and Liao, Jing},
+  journal={ACM Transactions on Graphics (TOG)},
+  volume={43},
+  number={4},
+  pages={1--13},
+  year={2024},
+  publisher={ACM New York, NY, USA}
+}
+```
+
+## Contact
+
+If you have any question, contact us through email at zhangpeiying17@gmail.com.
+

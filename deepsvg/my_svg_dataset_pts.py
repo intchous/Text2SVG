@@ -9,7 +9,6 @@ import PIL
 import PIL.Image
 
 import torch
-from torch import nn
 from torch.utils.data import Dataset
 from torchvision import transforms
 

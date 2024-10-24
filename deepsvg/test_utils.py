@@ -1,6 +1,9 @@
 import random
+import numpy as np
+import numpy.random as npr
 import matplotlib.pyplot as plt
 import matplotlib.offsetbox as offsetbox
+
 import torch
 import pydiffvg
 
@@ -62,7 +65,7 @@ def tensor_to_img(tensor,  to_grayscale=True):
     return img
 
 
-# -----------------------------------------------------------
+# ----------------------------------------------------
 def pts_to_pathObj(convert_points):
     # Number of control points per segment is 2. Hence, calculate the total number of segments.
     num_segments = int(convert_points.shape[0] / 3)
@@ -199,7 +202,7 @@ def cubics_to_pathObj_affine(cubics, theta, tx, ty, s, s_norm, h=224, w=224, use
     return path, convert_points_ini
 
 
-# ----------------------------------
+# ----------------------------------------------------
 def paths_to_shapes(path_list, fill_color_list, stroke_width_list=None, stroke_color_list=None):
     if stroke_width_list is not None:
         for i, path in enumerate(path_list):
@@ -333,4 +336,113 @@ def control_polygon_distance(points):
     # Return the mean of the squared distances
     return squared_distances.mean()
 
+
 # ----------------------------------------------------
+def generate_single_affine_parameters(center, h, w, use_affine_norm=False, gt=None, device="cuda"):
+
+    circle_center_norm = np.array([0.4935, 0.4953])
+    circle_center = circle_center_norm * h
+
+    if use_affine_norm:
+        center_norm = center * 1.0 / h
+        tx_val = center_norm[0] - circle_center_norm[0]
+        ty_val = center_norm[1] - circle_center_norm[1]
+    else:
+        tx_val = float(center[0]) - circle_center[0]
+        ty_val = float(center[1]) - circle_center[1]
+
+    tx = torch.tensor(tx_val, dtype=torch.float32,
+                      device=device, requires_grad=True)
+    ty = torch.tensor(ty_val, dtype=torch.float32,
+                      device=device, requires_grad=True)
+
+    theta = torch.tensor(0.0, device=device, requires_grad=True)
+    s = torch.tensor(0.11, device=device, requires_grad=True)
+
+    wref, href = map(int, center)
+    wref = max(0, min(wref, w - 1))
+    href = max(0, min(href, h - 1))
+
+    if (gt is None):
+        fill_color_init = torch.tensor(np.concatenate((npr.uniform(size=[3]), [
+                                       np.random.uniform(0.7, 1)])), dtype=torch.float32, device=device, requires_grad=True)
+
+    else:
+        fill_color_init = list(gt[0, :, href, wref]) + [1.]
+        fill_color_init = torch.FloatTensor(
+            fill_color_init).to(device).requires_grad_(True)
+
+    return tx, ty, theta, s, fill_color_init
+
+
+# ----------------------------------------------------
+def get_experiment_id(debug=False):
+    if debug:
+        return 999999999999
+    import time
+    time.sleep(0.5)
+    return int(time.time()*100)
+
+
+def get_bezier_circle(radius=1, segments=4, bias=None):
+    points = []
+    if bias is None:
+        bias = (random.random(), random.random())
+    avg_degree = 360 / (segments * 3)
+    for i in range(0, segments * 3):
+        point = (np.cos(np.deg2rad(i * avg_degree)),
+                 np.sin(np.deg2rad(i * avg_degree)))
+        points.append(point)
+    points = torch.tensor(points)
+    points = (points) * radius + torch.tensor(bias).unsqueeze(dim=0)
+    points = points.type(torch.FloatTensor)
+    return points
+
+
+class RandomCoordInit():
+    def __init__(self, canvas_size, edge_margin_ratio=0.1):
+        self.canvas_size = canvas_size
+        self.edge_margin_ratio = edge_margin_ratio
+
+    def __call__(self):
+        h, w = self.canvas_size
+        edge_margin_w = self.edge_margin_ratio * w
+        edge_margin_h = self.edge_margin_ratio * h
+
+        x = npr.uniform(edge_margin_w, w - edge_margin_w)
+        y = npr.uniform(edge_margin_h, h - edge_margin_h)
+
+        return [x, y]
+
+
+class random_coord_init():
+    def __init__(self, canvas_size):
+        self.canvas_size = canvas_size
+
+    def __call__(self):
+        h, w = self.canvas_size
+        return [npr.uniform(0, 1) * w, npr.uniform(0, 1) * h]
+
+
+class naive_coord_init():
+    def __init__(self, pred, gt, format='[bs x c x 2D]',
+                 replace_sampling=True):
+        if isinstance(pred, torch.Tensor):
+            pred = pred.detach().cpu().numpy()
+        if isinstance(gt, torch.Tensor):
+            gt = gt.detach().cpu().numpy()
+
+        if format == '[bs x c x 2D]':
+            self.map = ((pred[0] - gt[0])**2).sum(0)
+        elif format == ['[2D x c]']:
+            self.map = ((pred - gt)**2).sum(-1)
+        else:
+            raise ValueError
+        self.replace_sampling = replace_sampling
+
+    def __call__(self):
+        coord = np.where(self.map == self.map.max())
+        coord_h, coord_w = coord[0][0], coord[1][0]
+        if self.replace_sampling:
+            self.map[coord_h, coord_w] = -1
+        return [coord_w, coord_h]

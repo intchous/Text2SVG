@@ -1,0 +1,32 @@
+h: 224
+w: 224
+
+# 1.5, 2.0, 2.1
+sd_version: "1.5"
+
+# vectorfusion
+dataset_name: "vectorfusion"
+
+# -1
+seed: 42
+
+# vsd, sds
+generation_mode: "vsd"
+
+# SD guidance scale
+guidance_scale: 20
+
+z_lr: 0.1
+color_lr: 0.01
+theta_lr_initial: 0.0006
+affine_lr_initial: 0.18
+s_lr_initial: 0.0018
+
+add_num_paths: 128
+
+NUM_AUGS: 1
+# 1, 2, 4
+GRAD_ACC: 2
+
+# 800, 1000, 2000
+num_iter: 2000

@@ -14,25 +14,13 @@ from torch.utils.data import DataLoader
 import torch.optim as optim
 from torch.optim.lr_scheduler import LambdaLR
 
-import json_help
-from json_help import dict_to_nonedict
+from optim_utils.util_options import dict_to_nonedict
+import optim_utils.util_options as opt_util
 
-from path_ini_util import load_init_svg, path2img, save_path_svg
+from path_ini_util import load_init_svg, path2img, save_path_svg, load_target
 from utils_svg import save_svg, to_svg
-# from utils_match import rm_mk_dir, judge_mask, do_xy_transform
-# from utils_preseg import get_segmentation, toposort_path
-from svg_deform_func import finetune_shapes, process_shapes
-
-
-# from optim_utils.util_svg import (
-#     get_cubic_segments_from_points,
-#     sample_bezier,
-#     make_clockwise,
-#     sample_points_by_length_distribution
-# )
 
 from optim_utils.util_pregroup import get_group, toposort_path, rm_mk_dir, judge_mask, do_xy_transform
-
 
 from losses import laplacian_smoothing_loss
 from utils_optm import linear_decay_lrlambda_f
@@ -58,7 +46,6 @@ gamma = 1.0
 
 
 def convert_path_cubic(cur_path):
-    # 第一个点是M
     idx_pts = 0
     pre_points = cur_path.points[0]
     new_points = [[pre_points[0], pre_points[1]]]
@@ -95,29 +82,24 @@ def convert_path_cubic(cur_path):
     num_pts = tmp_path.points.shape[0]
     assert ((num_pts-1) % 3 == 0)
 
-    # TODO: 即使当前tmp_path的num_pts是3k+1, 后面diffvg保存成svg时, 会自动优化掉最后一个点, 变成3k
     return num_pts, tmp_path
 
 
 def get_z_from_circle(absolute_base_dir, cfg, model=None):
-    rd_fp_list = ["2719851_cubic_3_r0.svg"]
+    rd_fp_list = ["circle_10.svg"]
 
     # dataset_h = 224
     # dataset_w = 224
     dataset_h = h
     dataset_w = w
-    signature = "ini_svgs_470510"
-    svg_data_img_dir = os.path.join(
-        absolute_base_dir, "vae_dataset", signature + "_cubic_single_img/")
+    svg_data_img_dir = os.path.join(absolute_base_dir, "vae_dataset/")
 
     tmp_svg_dataset_test = SVGDataset_nopadding(
-        directory=absolute_base_dir + "vae_dataset/ini_svgs_470510_cubic_single_fit/", h=dataset_h, w=dataset_w, fixed_length=cfg.max_pts_len_thresh, file_list=rd_fp_list, img_dir=svg_data_img_dir, transform=Normalize(dataset_w, dataset_h), use_model_fusion=cfg.use_model_fusion)
+        directory=svg_data_img_dir, h=dataset_h, w=dataset_w, fixed_length=cfg.max_pts_len_thresh, file_list=rd_fp_list, img_dir=svg_data_img_dir, transform=Normalize(dataset_w, dataset_h), use_model_fusion=cfg.use_model_fusion)
 
     tmp_test_loader = DataLoader(
         tmp_svg_dataset_test, batch_size=1, shuffle=False)
 
-    # 获得svg的latent vector
-    # with torch.no_grad():
     for i, batch_data in enumerate(tmp_test_loader):
         points_batch = batch_data["points"]
         filepaths = batch_data["filepaths"]
@@ -126,10 +108,11 @@ def get_z_from_circle(absolute_base_dir, cfg, model=None):
 
         bat_s, _, _, _ = batch_data["cubics"].shape
         cubics_batch_fl = batch_data["cubics"].view(bat_s, -1, 2)
+
+        lengths = batch_data["lengths"]
         data_pts = cubics_batch_fl.to(device)
 
         data_input = data_pts.unsqueeze(1)
-        # data_input.shape:  torch.Size([1, 1, 62, 2])
 
         output = model(args_enc=data_input,
                        args_dec=data_input, ref_img=path_imgs)
@@ -163,42 +146,6 @@ def initialize_optimizers_and_schedulers(z_list, theta_list, s_list, tx_list, ty
         color_optimizer, lr_lambda=lrlambda_f_color, last_epoch=-1)
 
     return z_optimizer, color_optimizer, affine_optimizer, scheduler_z, scheduler_affine, scheduler_color
-
-
-def get_img_from_list(z_list, theta_list, tx_list, ty_list, s_list, color_list, model, s_norm, w=224, h=224, svg_path_fp="", use_affine_norm=False, render_func=None, return_shapes=True):
-
-    # ---------------------------------------------
-    # z_list[0].shape:  torch.Size([1, 24])
-    z_batch = torch.stack(z_list).to(device).squeeze(1)
-    # 使用模型生成点序列（批处理）
-    generated_data_batch = model(
-        args_enc=None, args_dec=None, z=z_batch.unsqueeze(1).unsqueeze(2))
-    generated_pts_batch = generated_data_batch["args_logits"]
-    recon_data_output_batch = generated_pts_batch.squeeze(
-        1)
-    # recon_data_output_batch.shape:  torch.Size([60, 32, 2])
-    # ---------------------------------------------
-
-    # ---------------------------------------------
-    tmp_paths_list = []
-    for _idx in range(len(z_list)):
-
-        convert_points, convert_points_ini = recon_to_affine_pts(
-            recon_data_output=recon_data_output_batch[_idx], theta=theta_list[_idx], tx=tx_list[_idx], ty=ty_list[_idx], s=s_list[_idx], s_norm=s_norm, h=h, w=w, use_affine_norm=use_affine_norm)
-
-        optm_convert_path = pts_to_pathObj(convert_points)
-        tmp_paths_list.append(optm_convert_path)
-
-    if (return_shapes):
-        # 使用所有变换后的路径和对应颜色渲染图像
-        recon_img, tmp_img_render, tp_shapes, tp_shape_groups = render_and_compose(
-            tmp_paths_list=tmp_paths_list, color_list=color_list, w=w, h=h, svg_path_fp=svg_path_fp, render_func=render, return_shapes=return_shapes)
-        return recon_img, tmp_img_render, tp_shapes, tp_shape_groups
-
-    else:
-        recon_img, tmp_img_render = render_and_compose(
-            tmp_paths_list=tmp_paths_list, color_list=color_list, w=w, h=h, svg_path_fp=svg_path_fp, render_func=render_func, return_shapes=return_shapes)
-        return recon_img, tmp_img_render
 
 
 def get_cubic_segments_from_points(points):
@@ -263,14 +210,12 @@ def latent_inversion(ctrl_pts_cubic_list, cfg, model, s_norm, num_paths=10, devi
         p_target_sub_list.append(p_target_sub)
         matching_list.append(matching)
 
-    # 初始化z
     z_list = [get_z_from_circle(absolute_base_dir="./", cfg=cfg, model=model).to(
         device).requires_grad_(True) for _ in range(num_paths)]
 
     theta_list = [torch.tensor(0.0).to(device).requires_grad_(True)
                   for _ in range(num_paths)]
 
-    # 0.2, 0.25, 0.3
     s_list = [torch.tensor(0.2).to(device).requires_grad_(True)
               for _ in range(num_paths)]
 
@@ -293,13 +238,11 @@ def latent_inversion(ctrl_pts_cubic_list, cfg, model, s_norm, num_paths=10, devi
     m_kl_loss_weight = 0.1
 
     for epoch in range(num_epochs):
-        # z_list[0].shape:  torch.Size([1, 24])
         z_batch = torch.stack(z_list).to(device).squeeze(1)
         generated_data_batch = model(
             args_enc=None, args_dec=None, z=z_batch.unsqueeze(1).unsqueeze(2))
         generated_pts_batch = generated_data_batch["args_logits"]
         recon_data_output_batch = generated_pts_batch.squeeze(1)
-        # recon_data_output_batch.shape:  torch.Size([60, 32, 2])
         # ---------------------------------------------
 
         m_kl_loss = 0.0
@@ -311,7 +254,6 @@ def latent_inversion(ctrl_pts_cubic_list, cfg, model, s_norm, num_paths=10, devi
         m_smoothness_loss = 0.0
         for idx in range(num_paths):
             recon_data_output = recon_data_output_batch[idx]
-            # recon_data_output.shape:  torch.Size([40, 2])
 
             convert_points, convert_points_ini = recon_to_affine_pts(
                 recon_data_output=recon_data_output, theta=theta_list[idx], tx=tx_list[idx], ty=ty_list[idx], s=s_list[idx], s_norm=s_norm, h=h, w=w, use_affine_norm=False)
@@ -336,7 +278,6 @@ def latent_inversion(ctrl_pts_cubic_list, cfg, model, s_norm, num_paths=10, devi
 
             pred_sampled_points = sample_bezier(
                 ini_cubics, each_cubic_sample_num)
-            # pred_sampled_points.shape:  torch.Size([60, 2])
 
             m_svg_emd_loss = svg_emd_loss(
                 p_pred=pred_sampled_points,
@@ -353,7 +294,6 @@ def latent_inversion(ctrl_pts_cubic_list, cfg, model, s_norm, num_paths=10, devi
         total_svg_emd_loss = total_svg_emd_loss / num_paths
         loss = total_svg_emd_loss + m_smoothness_loss + m_kl_loss
 
-        # 如果当前损失小于最佳损失，则更新best_z和best_img
         if loss.item() < best_loss:
             best_loss = loss.item()
             best_z_list = z_list
@@ -416,11 +356,9 @@ def img_optm(target_img, z_list, color_list, s_list, theta_list, tx_list, ty_lis
 
         for idx in range(num_paths):
             recon_data_output = recon_data_output_batch[idx]
-            # recon_data_output.shape:  torch.Size([40, 2])
 
             convert_points, convert_points_ini = recon_to_affine_pts(
                 recon_data_output=recon_data_output, theta=theta_list[idx], tx=tx_list[idx], ty=ty_list[idx], s=s_list[idx], s_norm=s_norm, h=h, w=w, use_affine_norm=use_affine_norm)
-            # convert_points.shape:  torch.Size([30, 2]) (0-224)
             # -----------------------------------------------
 
             if (m_smoothness_loss_weight > 0):
@@ -489,7 +427,7 @@ def img_optm(target_img, z_list, color_list, s_list, theta_list, tx_list, ty_lis
     return best_tp_shapes, best_tp_shape_groups, best_z_list, best_s_list, best_theta_list, best_tx_list, best_ty_list, best_color_list, best_img, best_loss
 
 
-def imgs_dir_to_svg(signature, pregroup_opt, test_save_dir, tar_img_dir, gt_rsz=(224, 224), svgsign="ini"):
+def imgs_dir_to_svg(signature, pregroup_opt, test_save_dir, tar_img_dir, gt_rsz=(224, 224), svgsign="tpsort"):
 
     tar_img_list = os.listdir(tar_img_dir)
     random.shuffle(tar_img_list)
@@ -548,11 +486,7 @@ def imgs_dir_to_svg(signature, pregroup_opt, test_save_dir, tar_img_dir, gt_rsz=
             continue
         # --------------------------------------------
         print("im_fn = ", fn)
-
-        num_iter = 50
-
-        img_pil = PIL.Image.open(infile).convert('RGBA').resize(
-            gt_rsz, PIL.Image.Resampling.BICUBIC)
+        # img_pil = PIL.Image.open(infile).convert('RGBA').resize(gt_rsz, PIL.Image.Resampling.BICUBIC)
 
         # --------------------------------------------
         # img_fg_mask = remove(img_pil, only_mask=True)
@@ -636,7 +570,6 @@ def imgs_dir_to_svg(signature, pregroup_opt, test_save_dir, tar_img_dir, gt_rsz=
                                 h=canvas_height,
                                 w=canvas_width).cpu().numpy()
 
-            # 半透明的像素也算
             tmp_path_mask_alpha = (p_img_np[:, :, 3] > 0)
             # ------------------------------------------------------
 
@@ -651,7 +584,6 @@ def imgs_dir_to_svg(signature, pregroup_opt, test_save_dir, tar_img_dir, gt_rsz=
             # ------------------------------------------------------
 
             # -----------------------------------------------
-            # 判断是否属于前景
             fg_overlap = tmp_path_mask_alpha
             if (np.sum(fg_overlap) / np.sum(tmp_path_mask_alpha) < fg_overlap_thresh):
                 ca_cnt += 1
@@ -705,30 +637,22 @@ def imgs_dir_to_svg(signature, pregroup_opt, test_save_dir, tar_img_dir, gt_rsz=
         toposort_cur_tar_img_svg_path_info, cur_tar_shapes_ini, cur_tar_shapes_ini_groups = toposort_path(
             cur_tar_img_svg_path_info)
 
-        ini_point_var_fixed = []
-        for path in cur_tar_shapes_ini:
-            ini_point_var_fixed.append(path.points.clone().detach())
-
-        tar_shapes_ft, tar_shapes_ft_groups, gt_img_tensor = finetune_shapes(
-            ini_shapes=cur_tar_shapes_ini, ini_shape_groups=cur_tar_shapes_ini_groups, ini_point_var_fixed=ini_point_var_fixed, img_fp=infile, num_iter=num_iter, gt_rsz=gt_rsz, svgsign=svgsign)
-        # gt_img_tensor.shape torch.Size([1, 3, 224, 224])
-
-        post_dir = os.path.join(test_save_dir, svgsign + "_post")
-        tar_shapes_proc, tar_shapes_proc_groups, tar_shapes_color_var = process_shapes(
-            tmp_shapes=tar_shapes_ft, tmp_shape_groups=tar_shapes_ft_groups, experiment_dir=post_dir, h=gt_rsz[0], w=gt_rsz[1])
-
         # -----------------------------------------------
-        num_paths = len(tar_shapes_proc)
+        num_paths = len(cur_tar_shapes_ini)
         print("num_paths: ", num_paths)
 
         if (num_paths > 512):
             continue
 
-        # tp_shapes = tar_shapes_proc
-        # tp_shapes_groups = tar_shapes_proc_groups
-
         tp_shapes = cur_tar_shapes_ini
         tp_shapes_groups = cur_tar_shapes_ini_groups
+
+        gt_img_tensor = load_target(
+            fp=infile, size=gt_rsz, return_rgb=False, device=device)
+
+        tar_shapes_color_var = []
+        for group in tp_shapes_groups:
+            tar_shapes_color_var.append(group.fill_color)
 
         ctrl_pts_cubic_list = []
         for _path in tp_shapes:
@@ -760,14 +684,9 @@ def imgs_dir_to_svg(signature, pregroup_opt, test_save_dir, tar_img_dir, gt_rsz=
 
 
 if __name__ == "__main__":
-    # CUDA_VISIBLE_DEVICES=1 python img_to_svg.py --signature svg_png --svgsign ini --sz 224
-
-    # CUDA_VISIBLE_DEVICES=2 python img_to_svg.py --signature svg_png --svgsign tpsort --sz 224
 
     parser = argparse.ArgumentParser()
     parser.add_argument("--signature", type=str, default="svg_png")
-    parser.add_argument("--svgsign", type=str,
-                        default="ini", help="ini or tpsort")
     parser.add_argument("--sz", type=int, default=224)
     args = parser.parse_args()
 
@@ -775,8 +694,8 @@ if __name__ == "__main__":
     w = args.sz
     seg_size = (h, w)
 
-    img_match_param_fp = "./img_group_param_" + str(h) + ".yaml"
-    pregroup_opt = json_help.parse(img_match_param_fp)
+    img_match_param_fp = "./configs/img_group_param_" + str(h) + ".yaml"
+    pregroup_opt = opt_util.parse(img_match_param_fp)
     pregroup_opt = dict_to_nonedict(pregroup_opt)
 
     test_save_dir = "./test_dataset"
@@ -788,12 +707,11 @@ if __name__ == "__main__":
 
     # -------------------------------------------------
     cfg = _DefaultConfig()
-    yaml_fp = "./path_vae_optm.yaml"
+    yaml_fp = "./configs/vae_optim_config.yaml"
 
     with open(yaml_fp, 'r') as f:
         config_data = yaml.safe_load(f)
 
-    # 使用配置数据更新cfg，即使cfg中没有预先定义的参数也会被加入
     for key, value in config_data.items():
         setattr(cfg, key, value)
 
@@ -801,32 +719,14 @@ if __name__ == "__main__":
     cfg.img_latent_dim = int(cfg.d_img_model / 64.0)
     cfg.vq_edim = int(cfg.dim_z / cfg.vq_comb_num)
 
-    input_dim = cfg.n_args
-    output_dim = cfg.n_args
-    hidden_dim = cfg.d_model
     latent_dim = cfg.dim_z
     max_pts_len_thresh = cfg.max_pts_len_thresh
-    kl_coe = cfg.kl_coe
-
-    batch_size = cfg.batch_size
     num_epochs = 200
-    learning_rate = 0.001
 
-    log_interval = 20
-    validate_interval = 20
-
-    log_dir = "./transformer_vae_logs/"
-    signature = "ini_svgs_470510"
-
-    # absolute_base_dir = os.path.dirname(os.path.dirname(
-    #     os.path.dirname(os.path.abspath(__file__)))) + "/"
-    # print("absolute_base_dir: ", absolute_base_dir)
+    # ---------------------------------------
+    absolute_base_dir = os.path.dirname(os.path.dirname(
+        os.path.dirname(os.path.abspath(__file__)))) + "/"
     absolute_base_dir = "./"
-
-    svg_data_dir = os.path.join(
-        absolute_base_dir, "vae_dataset", signature + "_cubic_single_fit/")
-    svg_data_img_dir = os.path.join(
-        absolute_base_dir, "vae_dataset", signature + "_cubic_single_img/")
 
     color_black = torch.FloatTensor([0, 0, 0, 1]).to("cuda")
 
@@ -835,15 +735,9 @@ if __name__ == "__main__":
     model = SVGTransformer(cfg)
     model = model.to(device)
 
-    desc = "naive_vae_transformer_v1-5-7_" + "dataset-" + signature + "_" + "kl-" + str(kl_coe) + "_" + "hd-" + str(hidden_dim) + "_" + "ld-" + str(latent_dim) + "_" + "avg-" + str(cfg.avg_path_zdim) + "_" + "vae-" + \
-        str(cfg.use_vae) + "_" + "sigm-" + str(cfg.use_sigmoid) + \
-        "_" + "usemf-" + str(cfg.use_model_fusion) + "_" + \
-        "losswl1-" + str(cfg.loss_w_l1) + "_" + "mce-" + \
-        str(cfg.ModifiedConstEmbedding)
-
+    desc = "cmd_10"
     print("desc: ", desc)
 
-    transformer_signature = desc
     model_save_dir = os.path.join("vae_model", desc)
     model_fp = os.path.join(model_save_dir, "best.pth")
 
@@ -855,7 +749,6 @@ if __name__ == "__main__":
     # -------------------------------------------------
 
     color_lr = 0.01
-    # 是否优化颜色: 彩色图片True, 黑白图片False
     optm_color_img = True
 
     lr_fac = 10.0
@@ -872,7 +765,7 @@ if __name__ == "__main__":
 
     # ----------------------------------------------------
     imgs_dir_to_svg(signature=args.signature,
-                    pregroup_opt=pregroup_opt, test_save_dir=test_save_dir, tar_img_dir=tar_img_dir, gt_rsz=seg_size, svgsign=args.svgsign)
+                    pregroup_opt=pregroup_opt, test_save_dir=test_save_dir, tar_img_dir=tar_img_dir, gt_rsz=seg_size)
 
     del_dir = os.path.join(test_save_dir, "tar_" +
                            args.signature + "_img_mask/")
